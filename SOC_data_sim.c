@@ -12,11 +12,15 @@
 #include <stdbool.h>
 #include <math.h>
 
+// time variable declarations
+int dt = 1;
+int num_seconds = 100; // max duration of sim data
+int t = 0;
 
 // circuit model parameters
-double Cc = 0.15;
-double Rc = 150;
-double Cbat = 1; // units in Amp * s
+double Cc = 2400;
+double Rc = 0.015;
+double Cbat = 18000; // units in Amp * s
 
 // State variables
 long double SOCk = 1.0;
@@ -30,7 +34,7 @@ double get_It_constant(int t);
 double get_It_toggle(int t);
 double get_It_piecewise(int t);
 // current load function and value
-double (*func_It)(int) = &get_It_toggle; // choose current function here
+double (*func_It)(int) = &get_It_piecewise; // choose current function here
 double It;
 
 // Linked list struct
@@ -129,14 +133,14 @@ long double func_vkp1(long double vk, int dt, double It, double Cc, double Rc) {
 
 // Constant
 double get_It_constant(int t) {
-	return 0.01;
+	return 100;
 }
 
 // Toggle on/off
 double get_It_toggle(int t) {
-	t = t % 1000;
-	if (t < 500) {
-		return 0.01;
+	t = t % 10;
+	if (t < 5) {
+		return 100;
 	} else {
 		return 0;
 	}
@@ -145,42 +149,20 @@ double get_It_toggle(int t) {
 // Piecewise function
 double get_It_piecewise(int t) {
 	// First interval
-	if ((0 <= t && t < 1000) || (3000 <= t && t < 4000) || (6000 <= t && t < 7000)) {
-		return 0.0003;
-		//supposed_slope = -0.0003;
-		//random_slope = supposed_slope * ((double)(random_direction + random_slope_magnification));
-		//random_slope -= 0.0001;
-		//if (rand() % 11 == 3 && random_slope > 0.000)
-		//	random_slope *= 1.7;
-		// y = (double)y_prev + (random_slope * t_interval);
+	if ((0 <= t && t < 10) || (30 <= t && t < 40) || (60 <= t && t < 70)) {
+		return 300;
 	}
 	// Second interval
-	else if ((1000 <= t && t < 2000) || (4000 <= t && t < 5000) || (7000 <= t && t < 8000)) {
+	else if ((10 <= t && t < 20) || (40 <= t && t < 50) || (70 <= t && t < 80)) {
 		return 0;
-		// supposed_slope = 0;
-		//	random_slope = ((double)(random_direction * random_slope_magnification * 0.00015));
-		//	if (rand() % 11 == 3 && random_slope >= -0.0003)
-		//		random_slope *= 1.7;
-		//	y = (double)y_prev + (random_slope * t_interval);
 	}
 	// Third interval
-	else if ((2000 <= t && t < 2500) || (5000 <= t && t < 5500) || (8000 <= t && t < 8500)) {
-		return -0.00041;
-		//supposed_slope = 0.00041;
-		//random_slope = supposed_slope * ((double)(random_direction + random_slope_magnification));
-		////random_slope -= 0.0001;
-		//if (rand() % 11 == 3 && random_slope <= 0.0003)
-		//	random_slope *= 1.7;
-		//y = (double)y_prev + (random_slope * t_interval);
+	else if ((20 <= t && t < 25) || (50 <= t && t < 55) || (80 <= t && t < 85)) {
+		return -80;
 	}
 	// Fourth interval
-	else if ((2500 <= t && t < 3000) || (5500 <= t && t < 6000) || (8500 <= t && t < 9000)) {
+	else if ((25 <= t && t < 30) || (55 <= t && t < 60) || (85 <= t && t < 100)) {
 		return 0;
-		//supposed_slope = 0;
-		//random_slope = ((double)(random_direction * random_slope_magnification * 0.00015));
-		//if (rand() % 11 == 3 && random_slope >= -0.0003)
-		//	random_slope *= 1.7;
-		//y = (double)y_prev + (random_slope * t_interval);
 	}
 	return 0;
 }
@@ -189,12 +171,7 @@ double get_It_piecewise(int t) {
 
 
 // DRIVER CODE
-int main() {
-	// time variable declarations
-	int dt = 10;
-	int num_seconds = 9000; // max duration of sim data
-	int t = 0;
-	
+int main() {	
 	bool start_new_list = false;
 	bool done_csv_printing = false;
 
@@ -210,54 +187,11 @@ int main() {
 		printf("Can't be opened");
 		return 1;
 	}
-	
-	// Variables used for random scatter generation algorithm
-	srand(time(NULL));		// This and few lines below are for random data generator algorithm
-	int random_direction;
-	//double random_slope, random_slope_magnification, supposed_slope;
-	double random_slope_magnification;
-
-	bool one_direction = false;		// This and few lines below are for random direction chooser algorithm
-	int memorized_direction;
-	int stored_t_val = t;
-	int tot_num_times_one_direc_deployed = 25;
-	int one_direc_rand_chooser_lim = (num_seconds / dt) / tot_num_times_one_direc_deployed;
-	int one_direc_rand_chosen = one_direc_rand_chooser_lim / 2;
-
 
 	// THE BIG WHILE LOOP
 	while (t <= num_seconds) {
 
-		// sometimes we send the data all positive for some time. This is the algorithm for that
-		// randomly chose a set direction to follow
-		if (rand() % (one_direc_rand_chooser_lim + 1) == one_direc_rand_chosen) {
-			one_direction = true;
-			stored_t_val = t;
-			memorized_direction = rand() % 2;
-			if (memorized_direction == 0)
-				memorized_direction = -1;
-		}
-		// stick with that set value
-		if (one_direction == true) {
-			random_direction = memorized_direction;
-			//printf("start");
-			if (t - stored_t_val > 120) {
-				one_direction = false;
-				//printf("end\n");
-			}
-		}
-		// or if not, just choose a new random direction
-		else {
-			random_direction = rand() % 2;
-			if (random_direction == 0)
-				random_direction = -1;
-		}
-
 		//----------------GENERATING Y-COOR.----------------
-
-		random_slope_magnification = ((double)rand() / RAND_MAX * 1.0 - 1.0) * (-1);//float in range 0 to 1
-		//printf("%.2lf\t", random_slope_magnification);
-		//printf("%d\n", random_direction);
 
 		// get current value at time t
 		It = (*func_It)(t);
@@ -275,8 +209,8 @@ int main() {
 			insertAtEnd(t, SOCkp1, vkp1, It);
 		}
 		// Inserting the linked list into the csv
-		// only take every 50th value to reduce file size
-		if (t % (dt * 50) == 0) {
+		// only take every 5th value to reduce file size
+		if (t % (dt * 5) == 0) {
 			print_list_into_csv(&fp);
 			printList();
 			if (t == num_seconds) {

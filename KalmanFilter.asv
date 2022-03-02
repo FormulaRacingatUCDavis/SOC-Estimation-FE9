@@ -26,19 +26,29 @@ Voc0 = 3.435;
 alp = 0.65;
 
 %
-% Setting up test data
+%Some random test data I made
+%
 Samples = 100;
 actualSOC = ones(1, Samples);
 V = ones(1, Samples);
 I = ones(1, Samples);
 timeSteps = ones(1, Samples);
-% importing from csv
-T = csvread("data_sim.csv");
 for i = 1:Samples
-    timeSteps(i) = T(i,1);
-    actualSOC(i) = T(i,2);
-    V(i) = T(i,3);
-    I(i) = T(i,4);
+    actualSOC(i) = actualSOC(i) * (sin(i) - 1*i^0.8 + 0.3*sin(10*i));
+    V(i) = V(i) * (sin(i) + 0.05*i + 0.3*sin(5*i));
+    I(i) = I(i) * (sin(i) + 0.05*i + 0.5*sin(2*i));
+    timeSteps(i) = i*0.1
+
+end
+
+% importing csv
+T = readtable("data_sim.csv");
+for i = 1:Samples
+    timeSteps(i) = T
+    actualSOC(i) = actualSOC(i) * (sin(i) - 1*i^0.8 + 0.3*sin(10*i));
+    V(i) = V(i) * (sin(i) + 0.05*i + 0.3*sin(5*i));
+    I(i) = I(i) * (sin(i) + 0.05*i + 0.5*sin(2*i));
+
 end
 
 
@@ -117,7 +127,7 @@ hold on
 plot(timeSteps, arrayOfxhats(1, :), 'DisplayName', "Extended Kalman Filter")
 %plot(t, SOCdr, 'DisplayName', "Open Loop")
 ylim = ([72-20, 72+20]);
-xlim([0, totalTime])
+xlim([0, totalTime/10])
 legend
 title(["SOC Estimate Using Extended Kalman Filter, Open Loop Estimate and", "Actual SOC vs. Time"])
 
@@ -135,7 +145,7 @@ function [xhatCorrected, PCorrected] = EKF(xhatk_1, Pk_1, I, Ik_1 , V, Voc0, Rk,
     xhat = fk(xhatk_1, Ik_1, dt, Cbat, Ccap, Rc);
     P = Aprime * Pk_1 * Aprime.' + Eprime * Qk1 * Eprime.';
     Lk = P * Cprime.' * (Cprime * P * Cprime.' + Rk)^-1;
-    xhatCorrected = xhat;% + Lk * (yk(V, Voc0) - hk(xhat, I, Voc0));
+    xhatCorrected = xhat + Lk * (yk(V, Voc0) - hk(xhat, I, Voc0));
     PCorrected = P - Lk * Cprime * P;
 end
 
