@@ -13,9 +13,9 @@
 #include <math.h>
 
 // time variable declarations
-int dt = 1;
+double dt = 1;
 int num_seconds = 100; // max duration of sim data
-int t = 0;
+double t = 0;
 
 // circuit model parameters
 double Cc = 2400;
@@ -24,22 +24,22 @@ double Cbat = 18000; // units in Amp * s
 
 // State variables
 long double SOCk = 1.0;
-long double vk = 0.0;
+long double vk = 4.19;
 // next values of state variables
 long double SOCkp1;
 long double vkp1;
 
 // current load functions
-double get_It_constant(int t);
-double get_It_toggle(int t);
-double get_It_piecewise(int t);
+double get_It_constant(double t);
+double get_It_toggle(double t);
+double get_It_piecewise(double t);
 // current load function and value
-double (*func_It)(int) = &get_It_piecewise; // choose current function here
+double (*func_It)(double) = &get_It_piecewise; // choose current function here
 double It;
 
 // Linked list struct
 struct node {
-	int t;
+	double t;
 	long double soc;
 	long double v;
 	double i;
@@ -52,7 +52,7 @@ struct node* current = NULL;
 
 
 // INSERT LINK AT THE FIRST LOCATION
-void insertFirst(int t_val, long double soc_val, long double v_val, double i_val) {
+void insertFirst(double t_val, long double soc_val, long double v_val, double i_val) {
 	//create a link
 	struct node* link = (struct node*)malloc(sizeof(struct node));
 
@@ -66,7 +66,7 @@ void insertFirst(int t_val, long double soc_val, long double v_val, double i_val
 }
 
 // Insert link at end
-struct node* insertAtEnd(int t_val, long double soc_val, long double v_val, double i_val) {
+struct node* insertAtEnd(double t_val, long double soc_val, long double v_val, double i_val) {
 	//create a link
 	struct node* link = (struct node*)malloc(sizeof(struct node));
 	link->t = t_val;
@@ -85,7 +85,7 @@ void printList() {
 	struct node* ptr = head;
 
 	while (ptr != NULL) {
-		printf("%d\t%.9Lf\t%.9Lf\t%.9f\n", ptr->t, ptr->soc, ptr->v, ptr->i);
+		printf("%.4f\t%.9Lf\t%.9Lf\t%.9f\n", ptr->t, ptr->soc, ptr->v, ptr->i);
 		ptr = ptr->next;
 	}
 }
@@ -106,7 +106,7 @@ int length() {
 int print_list_into_csv(FILE** fp) {
 	struct node* ptr = head;
 	while (ptr != NULL) {
-		fprintf(*fp, "%d,%.9Lf,%.9Lf,%.9f\n", ptr->t, ptr->soc, ptr->v, ptr->i);
+		fprintf(*fp, "%.9f,%.9Lf,%.9Lf,%.9f\n", ptr->t, ptr->soc, ptr->v, ptr->i);
 		ptr = ptr->next;
 	}
 	return 0;
@@ -118,12 +118,12 @@ int print_list_into_csv(FILE** fp) {
 //     d/dt(v) = (It / Cc) - v / (Cc * Rc)
 //
 // Using finite difference (x_{k+1} - x_{k})/dt approx d/dt(x)
-long double func_SOCkp1(long double SOCk, int dt, double It, double Cbat) {
+long double func_SOCkp1(long double SOCk, double dt, double It, double Cbat) {
 	long double SOCkp1 = SOCk - dt * (It / Cbat);
 	return SOCkp1;
 }
 
-long double func_vkp1(long double vk, int dt, double It, double Cc, double Rc) {
+long double func_vkp1(long double vk, double dt, double It, double Cc, double Rc) {
 	long double vkp1 = vk + dt * ((It / Cc) - (vk / (Cc * Rc)));
 	return vkp1;
 }
@@ -132,13 +132,13 @@ long double func_vkp1(long double vk, int dt, double It, double Cc, double Rc) {
 // all should have int t as an argument
 
 // Constant
-double get_It_constant(int t) {
+double get_It_constant(double t) {
 	return 100;
 }
 
 // Toggle on/off
-double get_It_toggle(int t) {
-	t = t % 10;
+double get_It_toggle(double t) {
+	t = (int)t % 10;
 	if (t < 5) {
 		return 100;
 	} else {
@@ -147,7 +147,7 @@ double get_It_toggle(int t) {
 }
 
 // Piecewise function
-double get_It_piecewise(int t) {
+double get_It_piecewise(double t) {
 	// First interval
 	if ((0 <= t && t < 10) || (30 <= t && t < 40) || (60 <= t && t < 70)) {
 		return 300;
@@ -209,16 +209,13 @@ int main() {
 			insertAtEnd(t, SOCkp1, vkp1, It);
 		}
 		// Inserting the linked list into the csv
-		// only take every 5th value to reduce file size
-		if (t % (dt * 5) == 0) {
-			print_list_into_csv(&fp);
-			printList();
-			if (t == num_seconds) {
-				done_csv_printing = true;
-			}
-			start_new_list = true;
-			current = head;
+		print_list_into_csv(&fp);
+		printList();
+		if (t == num_seconds) {
+			done_csv_printing = true;
 		}
+		start_new_list = true;
+		current = head;
 		// Important variable changes for each run of loop
 		vk = vkp1;
 		SOCk = SOCkp1;

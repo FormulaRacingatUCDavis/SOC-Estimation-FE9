@@ -135,7 +135,7 @@ function [xhatCorrected, PCorrected] = EKF(xhatk_1, Pk_1, I, Ik_1 , V, Voc0, Rk,
     xhat = fk(xhatk_1, Ik_1, dt, Cbat, Ccap, Rc);
     P = Aprime * Pk_1 * Aprime.' + Eprime * Qk1 * Eprime.';
     Lk = P * Cprime.' * (Cprime * P * Cprime.' + Rk)^-1;
-    xhatCorrected = xhat;% + Lk * (yk(V, Voc0) - hk(xhat, I, Voc0));
+    xhatCorrected = xhat + Lk * (yk(V, Voc0) - hk(xhat, I, Voc0));
     PCorrected = P - Lk * Cprime * P;
 end
 
