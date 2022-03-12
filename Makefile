@@ -6,7 +6,7 @@ TARGET = SOC_data_sim
 all: $(TARGET)
 
 $(TARGET): $(TARGET).c
-	$(CC) $(CFLAGS) -o $(TARGET) $(TARGET).c
+	$(CC) $(CFLAGS) -g -o $(TARGET) $(TARGET).c
 
 clean:
 	$(RM) $(TARGET)

@@ -1,8 +1,6 @@
 
 // This program generates a csv file with data on a simulated state of charge (SOC)
 // estimate for a vehicle. It also prints the data in the console (output).
-// Time duration of data: 9000s
-// Time interval of data: every 10s (this can be modified)
 // Created by Ayush Saha, 2/14/2022
 
 
@@ -19,28 +17,38 @@ double t = 0;
 
 // circuit model parameters
 double Cc = 2400;
+double R0 = 0.01;
 double Rc = 0.015;
 double Cbat = 18000; // units in Amp * s
+double alpha = 0.65; // slope of VOC(SOC) function
+// open-circuit voltage (measured)
+// needs to match expected Voc according to initial SOC
+long double voc0 = 3.435;
 
 // State variables
 long double SOCk = 1.0;
-long double vk = 4.19;
+// v_c: voltage across battery dynamics
+long double vck = 0;
+long double vk = 0;
+
 // next values of state variables
 long double SOCkp1;
+long double vckp1;
 long double vkp1;
 
-// current load functions
+// current load function options
 double get_It_constant(double t);
 double get_It_toggle(double t);
 double get_It_piecewise(double t);
 // current load function and value
-double (*func_It)(double) = &get_It_piecewise; // choose current function here
+double (*func_It)(double) = &get_It_toggle; // choose current function here
 double It;
 
 // Linked list struct
 struct node {
 	double t;
 	long double soc;
+	long double vc;
 	long double v;
 	double i;
 	struct node* next;
@@ -52,12 +60,13 @@ struct node* current = NULL;
 
 
 // INSERT LINK AT THE FIRST LOCATION
-void insertFirst(double t_val, long double soc_val, long double v_val, double i_val) {
+void insertFirst(double t_val, long double soc_val, long double vc_val, long double v_val, double i_val) {
 	//create a link
 	struct node* link = (struct node*)malloc(sizeof(struct node));
 
 	link->t = t_val;
 	link->soc = soc_val;
+	link->vc = vc_val;
 	link->v = v_val;
 	link->i = i_val;
 
@@ -66,11 +75,12 @@ void insertFirst(double t_val, long double soc_val, long double v_val, double i_
 }
 
 // Insert link at end
-struct node* insertAtEnd(double t_val, long double soc_val, long double v_val, double i_val) {
+struct node* insertAtEnd(double t_val, long double soc_val, long double vc_val, long double v_val, double i_val) {
 	//create a link
 	struct node* link = (struct node*)malloc(sizeof(struct node));
 	link->t = t_val;
 	link->soc = soc_val;
+	link->vc = vc_val;
 	link->v = v_val;
 	link->i = i_val;
 	link->next = NULL;
@@ -85,7 +95,7 @@ void printList() {
 	struct node* ptr = head;
 
 	while (ptr != NULL) {
-		printf("%.4f\t%.9Lf\t%.9Lf\t%.9f\n", ptr->t, ptr->soc, ptr->v, ptr->i);
+		printf("%.4f\t%.9Lf\t%.9Lf\t%.9Lf\t%.9f\n", ptr->t, ptr->soc, ptr->vc, ptr->v, ptr->i);
 		ptr = ptr->next;
 	}
 }
@@ -106,7 +116,7 @@ int length() {
 int print_list_into_csv(FILE** fp) {
 	struct node* ptr = head;
 	while (ptr != NULL) {
-		fprintf(*fp, "%.9f,%.9Lf,%.9Lf,%.9f\n", ptr->t, ptr->soc, ptr->v, ptr->i);
+		fprintf(*fp, "%.9f,%.9Lf,%.9Lf,%.9Lf,%.9f\n", ptr->t, ptr->soc, ptr->vc, ptr->v, ptr->i);
 		ptr = ptr->next;
 	}
 	return 0;
@@ -115,7 +125,7 @@ int print_list_into_csv(FILE** fp) {
 // Discrete solution to
 //
 //     d/dt(soc) = - It / Cbat
-//     d/dt(v) = (It / Cc) - v / (Cc * Rc)
+//     d/dt(vc) = (It / Cc) - vc / (Cc * Rc)
 //
 // Using finite difference (x_{k+1} - x_{k})/dt approx d/dt(x)
 long double func_SOCkp1(long double SOCk, double dt, double It, double Cbat) {
@@ -123,8 +133,14 @@ long double func_SOCkp1(long double SOCk, double dt, double It, double Cbat) {
 	return SOCkp1;
 }
 
-long double func_vkp1(long double vk, double dt, double It, double Cc, double Rc) {
-	long double vkp1 = vk + dt * ((It / Cc) - (vk / (Cc * Rc)));
+long double func_vckp1(long double vck, double dt, double It, double Cc, double Rc) {
+	long double vckp1 = vck + dt * ((It / Cc) - (vck / (Cc * Rc)));
+	return vckp1;
+}
+
+long double func_vkp1(long double SOCk, long double vck, double It) {
+	long double voc_soc = alpha * SOCk + voc0; // could be LUT as well
+	long double vkp1 = voc_soc - vck - R0 * It;
 	return vkp1;
 }
 
@@ -177,7 +193,7 @@ int main() {
 
 	// Very first value
 	It = (*func_It)(0);
-	insertFirst(t, SOCk, vk, It);
+	insertFirst(t, SOCk, vck, voc0, It);
 	t += dt;
 
 	// Opening the csv file
@@ -198,15 +214,20 @@ int main() {
 
 		// Calculate next SOC and Vc using discrete solution
 		SOCkp1 = func_SOCkp1(SOCk, dt, It, Cbat);		
-		vkp1 = func_vkp1(vk, dt, It, Cc, Rc);
+		vckp1 = func_vckp1(vck, dt, It, Cc, Rc);
 
-		// Inserting the (t,soc,v) coordinate into linked list
+		// add noise to It and vc
+		// KF should get imperfect data
+		It += (rand() % (int)(It + 1)) / 10.0 - It / 20;
+		vkp1 = func_vkp1(SOCkp1, vckp1, It);
+
+		// Inserting the (t,soc,vc) coordinate into linked list
 		if (start_new_list == true) {
-			insertFirst(t, SOCkp1, vkp1, It);
+			insertFirst(t, SOCkp1, vckp1, vkp1, It);
 			start_new_list = false;
 		}
 		else {
-			insertAtEnd(t, SOCkp1, vkp1, It);
+			insertAtEnd(t, SOCkp1, vckp1, vkp1, It);
 		}
 		// Inserting the linked list into the csv
 		print_list_into_csv(&fp);
@@ -217,8 +238,9 @@ int main() {
 		start_new_list = true;
 		current = head;
 		// Important variable changes for each run of loop
-		vk = vkp1;
 		SOCk = SOCkp1;
+		vck = vckp1;
+		vk = vkp1;
 		t += dt;
 	}
 	// print last few elements into csv after while loop is over
