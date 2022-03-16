@@ -21,7 +21,7 @@ Rc = 0.015;
 Ccap = 2400;
 Cbat = 18000;
 Voc0 = 3.435;
-alp = 0.65;
+alp = 0.007;
 
 %
 % Setting up test data
@@ -77,20 +77,16 @@ Fprime = [1, 0; 0, 1]              %F'
 % Coefficients for probability
 %
 Rk = 1E-4;
-RkP = 1E-4;
 Qk1 = [2.5*10^(-7), 0; 0, 0];
 
 %
 % Initializing xhat and P (covariance matrix)
 %
 arrayOfxhats = zeros(2, totalTime);   
-rawxhats = zeros(2, totalTime);
 arrayOfxhats(1) = 1;                        %Assumes SOC starts at 1 and Vc starts at 0
-LKarray = zeros(2, totalTime); 
-diff = zeros(2, totalTime);
+
 arrayOfPs = zeros(2, 2, totalTime);
-arrayOfPs(1:2, 1:2, 1) = RkP * eye(2);       %P starts of as n 2x2 identity matricies
-KGP = zeros(1, totalTime);
+arrayOfPs(1:2, 1:2, 1) = Rk * eye(2);       %P starts of as n 2x2 identity matricies
 
 %--------------------------------------------------------------------------
 % At time k
@@ -111,8 +107,7 @@ KGP = zeros(1, totalTime);
 %
 VOC = @(SOC, Voc0) 0.007*SOC + Voc0; %????               %Need equation for voc in terms of SOC 
 
-%yk = @(V, Voc0) V - Voc0;                         %yk: Actual Voltage
-yk = @(V, Vc) V + Vc;   
+yk = @(V, Vc) V + Vc;                                     %yk: Measured Voltage 
 
 hk = @(SOC, I, Voc0) VOC(SOC*100, Voc0) - R0*I;           %hk: Cacluated Voltage?
 
@@ -123,19 +118,15 @@ fk = @(xhatk_1, I, dt, Cbat, Ccap, Rc) xhatk_1 + dt * [-I / Cbat; (I / Ccap)  - 
 % t: Time
 % totalTime
 for t = 1:totalTime-1                                            %Not sure if this I is offset
-    [arrayOfxhats(:, t+1), arrayOfPs(:, :, t+1), LKarray(:, t), diff(:, t), rawxhats(:, t), KGP(t)] = EKF(arrayOfxhats(:, t), arrayOfPs(:, :, t), I(t+1), I(t), V(t+1), Voc0, Rk, Aprime, Cprime, Eprime, Fprime, fk, dt, Cbat, Ccap, Rc, Qk1, yk, hk, actualSOC(t));
+    [arrayOfxhats(:, t+1), arrayOfPs(:, :, t+1)] = EKF(arrayOfxhats(:, t), arrayOfPs(:, :, t), I(t+1), I(t), V(t+1), Voc0, Rk, Aprime, Cprime, Eprime, Fprime, fk, dt, Cbat, Ccap, Rc, Qk1, yk, hk, actualSOC(t));
 
 end
 
 %Plotting
 figure
-%plot(timeSteps, actualSOC, 'DisplayName', "Actual SOC")
-allsteps = (V + I*R0 + Vc - Voc0)/0.7;
-allsteps(1) = 1;
-plot(timeSteps, allsteps , 'DisplayName', "Actual SOC")
+plot(timeSteps, actualSOC, 'DisplayName', "Actual SOC")
 hold on
 plot(timeSteps, arrayOfxhats(1, :), 'DisplayName', "Extended Kalman Filter")
-%plot(timeSteps, (V + I*R0 + Vc - Voc0)/0.007, 'DisplayName', "Extended Kalman Filter")
 %plot(t, SOCdr, 'DisplayName', "Open Loop")
 ylim = ([72-20, 72+20]);
 xlim([0, totalTime])
@@ -147,38 +138,17 @@ xlabel("time (s)")
 ylabel("SOC")
 saveas(gcf, "./Figures/2ekf.jpg")
 
-%Vc should change with time??
-
 
 %Calculate next xhat and P using the previous ones
-function [xhatCorrected, PCorrected, Lknum, diff, hy, KGP] = EKF(xhatk_1, Pk_1, I, Ik_1 , V, Voc0, Rk, Aprime, Cprime, Eprime, Fprime, fk, dt, Cbat, Ccap, Rc, Qk1, yk, hk, actualSOC)
-
-    %Testing
-    %xhat gives us current SOC
-    hy = xhatk_1; % - dt * [I / Cbat; 0];
-    %End Testing
+function [xhatCorrected, PCorrected] = EKF(xhatk_1, Pk_1, I, Ik_1 , V, Voc0, Rk, Aprime, Cprime, Eprime, Fprime, fk, dt, Cbat, Ccap, Rc, Qk1, yk, hk, actualSOC)
 
 
     xhat = fk(xhatk_1, I, dt, Cbat, Ccap, Rc);
     P = Aprime * Pk_1 * Aprime.' + Eprime * Qk1 * Eprime.';
 
-    %Testing
-    KGP = Cprime * P * Cprime.' + Rk;
-    Lknum = P * Cprime.';
-    %End Testing
-
     Lk = P * Cprime.' * (Cprime * P * Cprime.' + Rk)^-1;
-    %                            Measured Voltage       What the voltage
-                                                      % Should be at SOC
-    
-    %Testing                                               
-    diff = yk(V, xhat(2, 1)) - hk(xhat(1, 1), I, Voc0);
-    %xhatCorrected = xhat + Lk * (yk(V, Voc0) - hk(xhat, I, Voc0));
+
     xhatCorrected = xhat + Lk * (yk(V, xhat(2, 1)) - hk(xhat(1, 1), I, Voc0));
-    %End Testing
-
-
-    %xhatCorrected = xhat + Lk * (hk(actualSOC, I, Voc0) - hk(xhat(1, 1), I, Voc0));
     PCorrected = P - Lk * Cprime * P;
 end
 
