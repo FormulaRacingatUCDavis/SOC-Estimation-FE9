@@ -1,7 +1,5 @@
 
 clc;
-clear;
-close all;
 %formatlatex
 format longG
 warning('off',  'all')
@@ -17,29 +15,44 @@ warning('on',  'all')
 % Constants
 % k = (time value);
 % T = (value);
-dt = 1;   %Sampling Period
+dt = 0.01;   %Sampling Period
 R0 = 0.01;
 Rc = 0.015;
 Ccap = 2400;
 Cbat = 18000;
 Voc0 = 3.435;
-alp = 0.65;
+alp = 0.007;
 
-%
-% Setting up test data
-Samples = 100;
+
+%Setting up test data
+Samples = 100 / dt;
 actualSOC = ones(1, Samples);
+Vc = ones(1, Samples);
 V = ones(1, Samples);
 I = ones(1, Samples);
 timeSteps = ones(1, Samples);
-% importing from csv
+%importing from csv
 T = csvread("data_sim.csv");
 for i = 1:Samples
-    timeSteps(i) = T(i,1);
-    actualSOC(i) = T(i,2);
-    V(i) = T(i,3);
-    I(i) = T(i,4);
+   timeSteps(i) = T(i,1);
+   actualSOC(i) = T(i,2);
+   Vc(i) = T(i,3);
+   V(i) = T(i,4);
+   I(i) = T(i,5);
 end
+
+% actualSOC = VarName2.';  %[0.3, 0.6, 0.5, 0.4, 0.5, 0.3, 0.6, 0.4]  %Actual SOC
+% Vc = VarName3.';
+% V = VarName4.';                          %[0.3, 0.6, 0.5, 0.4, 0.5, 0.3, 0.6, 0.4];         %Measured Voltage
+% I = VarName5.';                          %Measured Current
+% timeSteps = VarName1.';                  %Time
+%totalTime = length(timeSteps);
+
+%V(20) = 0;
+%V(21) = 0;
+%V(22) = 0;
+%V(23) = 0;
+%V(24) = 0;
 
 
 %
@@ -58,7 +71,7 @@ totalTime = length(timeSteps);
 % Initializing probability matricies
 %
 Aprime = [1, 0; 0, exp(-dt/(Ccap*Rc))]     %A' 
-Cprime = [2.04, 0]                  %VOC(SOC);
+Cprime = [0.007, -1]                  %VOC(SOC);
 Eprime = [1, 0; 0, 1]              %E'
 Fprime = [1, 0; 0, 1]              %F'
 
@@ -71,8 +84,9 @@ Qk1 = [2.5*10^(-7), 0; 0, 0];
 %
 % Initializing xhat and P (covariance matrix)
 %
-arrayOfxhats = zeros(2, totalTime);                  
-arrayOfxhats(1) = 1;
+arrayOfxhats = zeros(2, totalTime);   
+arrayOfxhats(1) = 1;                        %Assumes SOC starts at 1 and Vc starts at 0
+
 arrayOfPs = zeros(2, 2, totalTime);
 arrayOfPs(1:2, 1:2, 1) = Rk * eye(2);       %P starts of as n 2x2 identity matricies
 
@@ -93,11 +107,11 @@ arrayOfPs(1:2, 1:2, 1) = Rk * eye(2);       %P starts of as n 2x2 identity matri
 %
 % Function we need to calculate
 %
-VOC = @(SOC, Voc0) 0.009*SOC + Voc0; %????               %Need equation for voc in terms of SOC 
+VOC = @(SOC, Voc0) 0.007*SOC + Voc0; %????               %Need equation for voc in terms of SOC 
 
-yk = @(V, Voc0) V - Voc0;                         %yk: Actual Voltage
+yk = @(V, Vc) V + Vc;                                     %yk: Measured Voltage 
 
-hk = @(xhat, I, Voc0) VOC(xhat(1, 1), Voc0) - R0*I;           %hk: Cacluated Voltage?
+hk = @(SOC, I, Voc0) VOC(SOC*100, Voc0) - R0*I;           %hk: Cacluated Voltage?
 
 fk = @(xhatk_1, I, dt, Cbat, Ccap, Rc) xhatk_1 + dt * [-I / Cbat; (I / Ccap)  - (xhatk_1(2, 1) / (Ccap * Rc))];  %xhat = previous xhat + change in xhat in time: dt     %XHAT IS A DERIVATIVEEEE
 
@@ -106,7 +120,7 @@ fk = @(xhatk_1, I, dt, Cbat, Ccap, Rc) xhatk_1 + dt * [-I / Cbat; (I / Ccap)  - 
 % t: Time
 % totalTime
 for t = 1:totalTime-1                                            %Not sure if this I is offset
-    [arrayOfxhats(:, t+1), arrayOfPs(:, :, t+1)] = EKF(arrayOfxhats(:, t), arrayOfPs(:, :, t), I(t+1), I(t), V(t+1), Voc0, Rk, Aprime, Cprime, Eprime, Fprime, fk, dt, Cbat, Ccap, Rc, Qk1, yk, hk);
+    [arrayOfxhats(:, t+1), arrayOfPs(:, :, t+1)] = EKF(arrayOfxhats(:, t), arrayOfPs(:, :, t), I(t+1), I(t), V(t+1), Voc0, Rk, Aprime, Cprime, Eprime, Fprime, fk, dt, Cbat, Ccap, Rc, Qk1, yk, hk, actualSOC(t));
 
 end
 
@@ -117,7 +131,7 @@ hold on
 plot(timeSteps, arrayOfxhats(1, :), 'DisplayName', "Extended Kalman Filter")
 %plot(t, SOCdr, 'DisplayName', "Open Loop")
 ylim = ([72-20, 72+20]);
-xlim([0, totalTime])
+xlim([0, totalTime * dt])
 legend
 title(["SOC Estimate Using Extended Kalman Filter, Open Loop Estimate and", "Actual SOC vs. Time"])
 
@@ -126,16 +140,17 @@ xlabel("time (s)")
 ylabel("SOC")
 saveas(gcf, "./Figures/2ekf.jpg")
 
-%Vc should change with time??
-
 
 %Calculate next xhat and P using the previous ones
-function [xhatCorrected, PCorrected] = EKF(xhatk_1, Pk_1, I, Ik_1 , V, Voc0, Rk, Aprime, Cprime, Eprime, Fprime, fk, dt, Cbat, Ccap, Rc, Qk1, yk, hk)
+function [xhatCorrected, PCorrected] = EKF(xhatk_1, Pk_1, I, Ik_1 , V, Voc0, Rk, Aprime, Cprime, Eprime, Fprime, fk, dt, Cbat, Ccap, Rc, Qk1, yk, hk, actualSOC)
 
-    xhat = fk(xhatk_1, Ik_1, dt, Cbat, Ccap, Rc);
+
+    xhat = fk(xhatk_1, I, dt, Cbat, Ccap, Rc);
     P = Aprime * Pk_1 * Aprime.' + Eprime * Qk1 * Eprime.';
+
     Lk = P * Cprime.' * (Cprime * P * Cprime.' + Rk)^-1;
-    xhatCorrected = xhat + Lk * (yk(V, Voc0) - hk(xhat, I, Voc0));
+
+    xhatCorrected = xhat + Lk * (yk(V, xhat(2, 1)) - hk(xhat(1, 1), I, Voc0));
     PCorrected = P - Lk * Cprime * P;
 end
 

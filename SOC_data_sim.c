@@ -11,7 +11,7 @@
 #include <math.h>
 
 // time variable declarations
-double dt = 1;
+double dt = 0.01;
 int num_seconds = 100; // max duration of sim data
 double t = 0;
 
@@ -20,7 +20,7 @@ double Cc = 2400;
 double R0 = 0.01;
 double Rc = 0.015;
 double Cbat = 18000; // units in Amp * s
-double alpha = 0.65; // slope of VOC(SOC) function
+double alpha = 0.7; // slope of VOC(SOC) function
 // open-circuit voltage (measured)
 // needs to match expected Voc according to initial SOC
 long double voc0 = 3.435;
@@ -164,6 +164,7 @@ double get_It_toggle(double t) {
 
 // Piecewise function
 double get_It_piecewise(double t) {
+	t = ((int)t % 100);
 	// First interval
 	if ((0 <= t && t < 10) || (30 <= t && t < 40) || (60 <= t && t < 70)) {
 		return 300;
@@ -215,11 +216,12 @@ int main() {
 		// Calculate next SOC and Vc using discrete solution
 		SOCkp1 = func_SOCkp1(SOCk, dt, It, Cbat);		
 		vckp1 = func_vckp1(vck, dt, It, Cc, Rc);
+		vkp1 = func_vkp1(SOCkp1, vckp1, It);
 
 		// add noise to It and vc
 		// KF should get imperfect data
-		It += (rand() % (int)(It + 1)) / 10.0 - It / 20;
-		vkp1 = func_vkp1(SOCkp1, vckp1, It);
+		It += (rand() % 100) / 5.0 - 10;
+		vkp1 += (rand() % 100) / 500.0 - 0.1;
 
 		// Inserting the (t,soc,vc) coordinate into linked list
 		if (start_new_list == true) {
