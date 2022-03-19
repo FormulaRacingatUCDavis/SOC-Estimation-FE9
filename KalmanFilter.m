@@ -120,7 +120,7 @@ fk = @(xhatk_1, I, dt, Cbat, Ccap, Rc) xhatk_1 + dt * [-I / Cbat; (I / Ccap)  - 
 % t: Time
 % totalTime
 for t = 1:totalTime-1                                            %Not sure if this I is offset
-    [arrayOfxhats(:, t+1), arrayOfPs(:, :, t+1)] = EKF(arrayOfxhats(:, t), arrayOfPs(:, :, t), I(t+1), I(t), V(t+1), Voc0, Rk, Aprime, Cprime, Eprime, Fprime, fk, dt, Cbat, Ccap, Rc, Qk1, yk, hk, actualSOC(t));
+    [arrayOfxhats(:, t+1), arrayOfPs(:, :, t+1)] = EKF(arrayOfxhats(:, t), arrayOfPs(:, :, t), I(t+1), I(t), V(t+1), Voc0, Rk, Aprime, Cprime, Eprime, Fprime, fk, dt, Cbat, Ccap, Rc, Qk1, yk, hk);
 
 end
 
@@ -142,7 +142,7 @@ saveas(gcf, "./Figures/2ekf.jpg")
 
 
 %Calculate next xhat and P using the previous ones
-function [xhatCorrected, PCorrected] = EKF(xhatk_1, Pk_1, I, Ik_1 , V, Voc0, Rk, Aprime, Cprime, Eprime, Fprime, fk, dt, Cbat, Ccap, Rc, Qk1, yk, hk, actualSOC)
+function [xhatCorrected, PCorrected] = EKF(xhatk_1, Pk_1, I, Ik_1 , V, Voc0, Rk, Aprime, Cprime, Eprime, Fprime, fk, dt, Cbat, Ccap, Rc, Qk1, yk, hk)
 
 
     xhat = fk(xhatk_1, I, dt, Cbat, Ccap, Rc);
