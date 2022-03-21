@@ -145,12 +145,19 @@ saveas(gcf, "./Figures/2ekf.jpg")
 function [xhatCorrected, PCorrected] = EKF(xhatk_1, Pk_1, I, Ik_1 , V, Voc0, Rk, Aprime, Cprime, Eprime, Fprime, fk, dt, Cbat, Ccap, Rc, Qk1, yk, hk)
 
 
+    % 1. Calculating estimates (xhat)
     xhat = fk(xhatk_1, I, dt, Cbat, Ccap, Rc);
+    
+    % 2. Updating the ERROR in the estimates (P matrix)
     P = Aprime * Pk_1 * Aprime.' + Eprime * Qk1 * Eprime.';
 
+    % 3. KG = errEst / (errEst + errMea);
     Lk = P * Cprime.' * (Cprime * P * Cprime.' + Rk)^-1;
 
+    % 4. nextEst = prevEst + KG*(Mea - prevEst);
     xhatCorrected = xhat + Lk * (yk(V, xhat(2, 1)) - hk(xhat(1, 1), I, Voc0));
+    
+    % 5. nextErrEst = (1-KG)*errEst;
     PCorrected = P - Lk * Cprime * P;
 end
 
