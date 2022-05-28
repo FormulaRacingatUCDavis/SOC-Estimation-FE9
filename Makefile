@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS  = -O1 -Wall -Werror -lm -Wno-unused-result
 
-TARGET = SOC_data_sim
+TARGET = KalmanFilter
 
 all: $(TARGET)
 
